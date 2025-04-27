@@ -71,7 +71,8 @@ MIDDLEWARE = [
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
-    "https://hotelsreservationsystemapi-production.up.railway.app",
+    "https://hotelsreservationsystemapi-production.up.railway.app/",
+    "https://hotels-reservation-system-ui.vercel.app",
 ]
 
 REST_FRAMEWORK = {
@@ -210,6 +211,7 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "https://hotelsreservationsystemapi-production.up.railway.app",
+    "https://hotels-reservation-system-ui.vercel.app",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
