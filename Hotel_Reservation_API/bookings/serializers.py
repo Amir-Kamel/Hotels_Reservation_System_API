@@ -1,121 +1,197 @@
+
 from rest_framework import serializers
-from .models import Booking
-from datetime import datetime
+from .models import Booking, BookingCartItem, BookingCartSummary
+from hotels.models import Hotel, RoomType ,Room
+from hotels.serializers import *
+from django.contrib.auth import get_user_model
+from django.utils import timezone
 from datetime import date
-from hotels.serializers import RoomSerializer , HotelSerializer
-from hotels.models import Hotel, Room
+from django.db import IntegrityError
+User = get_user_model()
+
+class BookingCartItemSerializer(serializers.ModelSerializer):
+    room_type = RoomTypeSerializer(read_only=True)
+    room_type_id = serializers.PrimaryKeyRelatedField(
+        queryset=RoomType.objects.all(), source='room_type', write_only=True
+    )
+    class Meta:
+        model = BookingCartItem
+        fields = ['id', 'room_type', 'room_type_id', 'quantity']
 
 
+# class BookingSerializer(serializers.ModelSerializer):
+#     user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
+#     hotel = serializers.PrimaryKeyRelatedField(queryset=Hotel.objects.all())
+#     item_inputs = BookingCartItemSerializer(many=True)
+#     class Meta:
+#         model = Booking
+#         fields = ['user', 'hotel', 'check_in', 'days', 'item_inputs']
 
+#     def validate_check_in(self, value):
+#         today = date.today()
+#         if value < today:
+#             raise serializers.ValidationError("Check-in date must be at least 1 days from today.")
+#         return value
+
+#     def create(self, validated_data):
+#         item_data = validated_data.pop('item_inputs', [])
+#         booking = Booking.objects.create(**validated_data)
+#         total = 0
+#         for item in item_data:
+#             if 'room_type' not in item or 'quantity' not in item:
+#                 raise serializers.ValidationError({"room_type":"Missing 'room_type' or 'quantity' in one of the items."})
+#             room_type = item['room_type']
+#             quantity = item['quantity']
+#             if room_type.hotel != booking.hotel:
+#                 raise serializers.ValidationError({"room_type":f"Room type {room_type.room_type} does not belong to this hotel."})
+#             room = Room.objects.filter(room_type=room_type, hotel=booking.hotel).first()
+#             if not room:
+#                 raise serializers.ValidationError({"room_type":f"No room found for room type {room_type.room_type} in this hotel."})
+#             if quantity > room.available_rooms:
+#                 raise serializers.ValidationError({"quantity":
+#                     f"Requested quantity ({quantity}) exceeds available rooms ({room.available_rooms}) "
+#                     f"for room type {room_type.room_type}."}
+#                 )
+#             BookingCartItem.objects.create(booking=booking, room_type=room_type, quantity=quantity)
+#             total += room.price_per_night * quantity
+#         if booking.days:
+#             total *= booking.days
+#         booking.total_price = total
+#         booking.save()
+#         BookingCartSummary.objects.create(booking=booking)
+#         return booking
 class BookingSerializer(serializers.ModelSerializer):
-    user = serializers.PrimaryKeyRelatedField(read_only=True)
-    room = serializers.PrimaryKeyRelatedField(queryset=Room.objects.all())
+    user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
     hotel = serializers.PrimaryKeyRelatedField(queryset=Hotel.objects.all())
-    total_price = serializers.DecimalField(read_only=True, max_digits=10, decimal_places=2)
-    has_conflict = serializers.SerializerMethodField()
+    item_inputs = BookingCartItemSerializer(many=True)
 
     class Meta:
         model = Booking
-        fields = '__all__'
+        fields = ['user', 'hotel', 'check_in', 'days', 'item_inputs']
 
-    def get_current_available_rooms(self, obj):
+    def validate_check_in(self, value):
         today = date.today()
-        active_bookings = obj.booking_set.filter(
-            status='confirmed',
-            check_in__lte=today,
-            check_out__gte=today
-        ).count()
-        return obj.total_rooms - active_bookings
-
-    def get_has_conflict(self, obj):
-        if obj.status != 'pending':
-            return False
-
-        overlapping = Booking.objects.filter(
-            room=obj.room,
-            status='confirmed',
-            check_in__lt=obj.check_out,
-            check_out__gt=obj.check_in
-        ).exclude(pk=obj.pk)
-
-        return overlapping.exists()
+        if value < today:
+            raise serializers.ValidationError("Check-in date must be at least 1 day from today.")
+        return value
 
     def validate(self, data):
-        check_in = data.get('check_in')
-        check_out = data.get('check_out')
-        room = data.get('room')
-        status = data.get('status')
-        today = date.today()
-
-        if not room:
-            raise serializers.ValidationError("Room must be specified.")
-
-        if self.instance and self.instance.status == 'confirmed':
-            raise serializers.ValidationError("You cannot edit a confirmed booking.")
-
-        if check_in and check_out:
-            # Check: dates must not be in the past
-            if check_in < today:
-                raise serializers.ValidationError({"check_in": "Check-in date cannot be in the past."})
-            if check_out < today:
-                raise serializers.ValidationError({"check_out": "Check-out date cannot be in the past."})
-
-            # Check: checkout must be after check-in
-            if check_out <= check_in:
-                raise serializers.ValidationError({"check_out": "Check-out must be after check-in."})
-
-            if status == 'confirmed' and self.instance.status != 'confirmed':
-                existing_bookings = Booking.objects.filter(
-                    room=room,
-                    status='confirmed',
-                    check_in__lt=check_out,
-                    check_out__gt=check_in
-                ).exclude(pk=self.instance.pk)
-
-                if existing_bookings.exists():
-                    raise serializers.ValidationError("The room is already confirmed for the selected dates.")
-
-            # Check: overlapping bookings
-            existing_bookings = Booking.objects.filter(room=room, status='confirmed')
-            if self.instance:
-                existing_bookings = existing_bookings.exclude(pk=self.instance.pk)
-
-            for booking in existing_bookings:
-                if check_in < booking.check_out and check_out > booking.check_in:
-                    raise serializers.ValidationError({
-                        'non_field_errors': [
-                            f"Room '{room}' is already booked from {booking.check_in} to {booking.check_out}."
-                        ]
-                    })
-
+        # Check for duplicate room_type entries
+        room_type_ids = [item['room_type'].id for item in data.get('item_inputs', []) if 'room_type' in item]
+        if len(room_type_ids) != len(set(room_type_ids)):
+            raise serializers.ValidationError({
+                "item_inputs": "Duplicate room types are not allowed. Please only include each room type once."
+            })
         return data
 
     def create(self, validated_data):
-        check_in = validated_data['check_in']
-        check_out = validated_data['check_out']
-        room = validated_data['room']
+        item_data = validated_data.pop('item_inputs', [])
+        booking = Booking.objects.create(**validated_data)
+        total = 0
 
-        # Perform the same validation for overlapping bookings here
-        if check_in and check_out:
-            existing_bookings = Booking.objects.filter(room=room, status='confirmed')
+        for item in item_data:
+            if 'room_type' not in item or 'quantity' not in item:
+                raise serializers.ValidationError({"room_type": "Missing 'room_type' or 'quantity' in one of the items."})
+            
+            room_type = item['room_type']
+            quantity = item['quantity']
 
-            # Check for overlapping bookings
-            for booking in existing_bookings:
-                if check_in < booking.check_out and check_out > booking.check_in:
-                    raise serializers.ValidationError({
-                        'non_field_errors': [
-                            f"Room '{room}' is already booked from {booking.check_in} to {booking.check_out}."
-                        ]
-                    })
+            if room_type.hotel != booking.hotel:
+                raise serializers.ValidationError({
+                    "room_type_id": f"Room type {room_type.room_type} does not belong to this hotel."
+                })
 
-        # Convert string dates to datetime if necessary
-        if isinstance(check_in, str):
-            check_in = datetime.strptime(check_in, "%Y-%m-%d").date()
-        if isinstance(check_out, str):
-            check_out = datetime.strptime(check_out, "%Y-%m-%d").date()
+            room = Room.objects.filter(room_type=room_type, hotel=booking.hotel).first()
+            if not room:
+                raise serializers.ValidationError({
+                    "room_type_id": f"No room found for room type {room_type.room_type} in this hotel."
+                })
 
-        num_nights = (check_out - check_in).days
-        validated_data['total_price'] = num_nights * room.price_per_night
+            if quantity > room.available_rooms:
+                raise serializers.ValidationError({
+                    "quantity": f"Requested quantity ({quantity}) exceeds available rooms ({room.available_rooms}) "
+                                f"for room type {room_type.room_type}."
+                })
 
+            try:
+                BookingCartItem.objects.create(booking=booking, room_type=room_type, quantity=quantity)
+            except IntegrityError:
+                raise serializers.ValidationError({
+                    "room_type_id": f"Duplicate entry detected for room type {room_type.room_type}."
+                })
+
+            total += room.price_per_night * quantity
+
+        if booking.days:
+            total *= booking.days
+
+        booking.total_price = total
+        booking.save()
+
+        BookingCartSummary.objects.create(booking=booking)
+        return booking
+
+class BookingCartSummarySerializer(serializers.ModelSerializer):
+    booking = serializers.PrimaryKeyRelatedField(queryset=Booking.objects.all())
+    class Meta:
+        model = BookingCartSummary
+        fields = "__all__"
+        
+class BookingPaymentSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField()
+    hotel = HotelSerializer(read_only=True)
+    items = BookingCartItemSerializer(many=True)
+    summary = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Booking
+        fields = "__all__"
+    def get_summary(self, obj):
+        summary = getattr(obj, 'cart_summary', None)
+        return {
+            "total_price": summary.total_price if summary else 0,
+            "created_at": summary.created_at if summary else None
+        }
         return super().create(validated_data)
 
+class ListBookingsSerializer(serializers.ModelSerializer):
+    hotel_name = serializers.CharField(source='hotel.name', read_only=True)
+    client_name = serializers.CharField(source='user.username', read_only=True)
+    client_email = serializers.EmailField(source='user.email', read_only=True)
+    hotel_address = serializers.CharField(source='hotel.address', read_only=True)
+    created_at = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S", read_only=True)
+    check_in = serializers.DateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    check_out = serializers.DateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    hotel_image = serializers.ImageField(source='hotel.images.first.image', read_only=True)
+
+    class Meta:
+        model = Booking
+        fields = [
+            'id','user','client_name','client_email', 'hotel', 'hotel_name', 'check_in', 'check_out',
+            'total_price', 'status', 'created_at','hotel_image','hotel_address'
+        ]
+
+class CustomHotelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Hotel
+        fields = ['id', 'name', 'owner','address']  
+
+class CustomBookingCartItemSerializer(serializers.ModelSerializer):
+    room_type = serializers.StringRelatedField()
+    
+    class Meta:
+        model = BookingCartItem
+        fields = ['id', 'room_type', 'quantity']
+
+class CustomBookingPaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BookingCartSummary  
+        fields = ['total_price', 'created_at']
+
+class CustomBookingSerializer(serializers.ModelSerializer):
+    client_name = serializers.CharField(source='user.username', read_only=True)
+    client_email = serializers.EmailField(source='user.email', read_only=True)
+    client_phone = serializers.CharField(source='user.phone', read_only=True)
+    class Meta:
+        model = Booking
+        fields = ['id', 'client_name','client_email','client_phone', 'check_in', 'check_out', 'total_price', 'status', 'created_at']
