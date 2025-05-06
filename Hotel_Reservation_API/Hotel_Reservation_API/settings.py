@@ -30,7 +30,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-a)#j@2z376l+rpm%e0%m5b6_*)qny$a=0kh@14up9vwbjhn@k8')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DJANGO_DEBUG", "False") == "True"
 
 
 ALLOWED_HOSTS = ['*']  # for testing, later we restrict it
@@ -106,24 +106,23 @@ WSGI_APPLICATION = 'Hotel_Reservation_API.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-if os.getenv('USE_LOCAL_DB', 'False') == 'True':
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'hotel',
-            'USER': 'hotel',
-            'PASSWORD': '12345',
-            'HOST': 'localhost',
-            'PORT': '5432',
-        }
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'hotel',
+        'USER': 'hotel',
+        'PASSWORD': '12345',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
-else:
-    DATABASES = {
-        'default': dj_database_url.config(
-            default='postgresql://hotel_owner:npg_zfRFh30NlHbC@ep-nameless-block-a4256rsv-pooler.us-east-1.aws.neon.tech/hotel?sslmode=require',
-            conn_max_age=600,
-        )
-    }
+}
+
+# Use Neon database if running in a production environment
+NEON_DATABASE_URL = os.getenv("DATABASE_URL")
+
+if NEON_DATABASE_URL:  # If DATABASE_URL is set, switch to Neon DB
+    DATABASES["default"] = dj_database_url.config(default=NEON_DATABASE_URL)
 
 
 
@@ -161,12 +160,9 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = '/static/'
-
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'static'),
-]
+STATIC_URL = "/static/"
+STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
 # STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
