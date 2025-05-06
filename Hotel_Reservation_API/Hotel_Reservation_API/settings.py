@@ -1,3 +1,4 @@
+
 """
 Django settings for Hotel_Reservation_API project.
 
@@ -30,12 +31,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-a)#j@2z376l+rpm%e0%m5b6_*)qny$a=0kh@14up9vwbjhn@k8')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DJANGO_DEBUG", "False") == "True"
 
 
 ALLOWED_HOSTS = ['*']  # for testing, later we restrict it
 
-
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Application definition
 
@@ -45,6 +46,7 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    "whitenoise.runserver_nostatic",
     'django.contrib.staticfiles',
     'accounts',
     'hotels',
@@ -59,6 +61,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.security.SecurityMiddleware',
@@ -106,24 +109,23 @@ WSGI_APPLICATION = 'Hotel_Reservation_API.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-if os.getenv('USE_LOCAL_DB', 'False') == 'True':
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'hotel',
-            'USER': 'hotel',
-            'PASSWORD': '12345',
-            'HOST': 'localhost',
-            'PORT': '5432',
-        }
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'hotel',
+        'USER': 'hotel',
+        'PASSWORD': '12345',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
-else:
-    DATABASES = {
-        'default': dj_database_url.config(
-            default='postgresql://hotel_owner:npg_zfRFh30NlHbC@ep-nameless-block-a4256rsv-pooler.us-east-1.aws.neon.tech/hotel?sslmode=require',
-            conn_max_age=600,
-        )
-    }
+}
+
+# Use Neon database if running in a production environment
+NEON_DATABASE_URL = os.getenv("DATABASE_URL")
+
+if NEON_DATABASE_URL:  # If DATABASE_URL is set, switch to Neon DB
+    DATABASES["default"] = dj_database_url.config(default=NEON_DATABASE_URL)
 
 
 
@@ -157,16 +159,14 @@ USE_I18N = True
 
 USE_TZ = True
 
+CSRF_TRUSTED_ORIGINS = ['*']
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = '/static/'
-
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'static'),
-]
+STATIC_URL = "/static/"
+STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
 # STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
@@ -177,6 +177,9 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'Hotel_Reservation_API/media')
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+if not os.path.exists(STATIC_ROOT):
+    os.makedirs(STATIC_ROOT)
 
 AUTH_USER_MODEL = 'accounts.User'
 # Login and Signup Redirect URLs
@@ -205,5 +208,12 @@ SIMPLE_JWT = {
     "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
     "TOKEN_BLACKLIST_ENABLED": True,
 }
+
+if not DEBUG:  # Ensure media files work in production
+    import mimetypes
+    mimetypes.add_type("image/png", ".png", True)
+    mimetypes.add_type("image/jpeg", ".jpg", True)
+    mimetypes.add_type("image/jpeg", ".jpeg", True)
+    mimetypes.add_type("image/gif", ".gif", True)
 
 
