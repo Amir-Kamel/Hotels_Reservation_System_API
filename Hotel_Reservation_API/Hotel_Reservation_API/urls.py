@@ -33,6 +33,6 @@ urlpatterns = [
 
 if not settings.DEBUG:
     urlpatterns += [
-        re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
+        re_path(r'Hotel_Reservation_API/media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
     ]
 
