@@ -72,6 +72,7 @@ class RoomType(models.Model):
 
     class Meta:
         db_table = "room_type"
+        unique_together = ('hotel', 'room_type')
 
 class RoomImage(models.Model):
     def Room_image_path(instance,filename):
