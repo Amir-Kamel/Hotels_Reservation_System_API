@@ -99,6 +99,7 @@ class UserRetriveUpdateView(RetrieveUpdateAPIView):
 
 # allowed for anyone
 class HotelOwnerAndCustomerRegistrationView(CreateAPIView):
+    permission_classes = [AllowAny]
     serializer_class = UserSerializer
     def create(self, request, *args, **kwargs):
         serilizer = UserSerializer(data=request.data)
