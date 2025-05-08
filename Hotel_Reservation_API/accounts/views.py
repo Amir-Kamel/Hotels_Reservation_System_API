@@ -7,16 +7,19 @@ from .serializers import *
 from .permissions import *
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.generics import CreateAPIView,ListCreateAPIView,RetrieveUpdateDestroyAPIView,RetrieveUpdateAPIView
+from rest_framework.generics import CreateAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView, \
+    RetrieveUpdateAPIView
 from rest_framework.views import APIView
 from rest_framework import status, permissions
 from rest_framework.response import Response
 
+
 # allowed for admins
-class UserListCreateView(ListCreateAPIView): 
+class UserListCreateView(ListCreateAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsAdminUser]
     queryset = UserSerializer.Meta.model.objects.all()
+
     def get(self, request, *args, **kwargs):
         try:
             queryset = self.get_queryset()
@@ -36,7 +39,7 @@ class UserListCreateView(ListCreateAPIView):
 
 
 # allowed for admins
-class UserRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):  
+class UserRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsAdminUser]
     queryset = UserSerializer.Meta.model.objects.all()
@@ -49,15 +52,15 @@ class UserRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=400)
 
-    def update(self, request, *args, **kwargs):
+    def update(self, request):
         try:
             instance = self.get_object()
             serializer = self.get_serializer(instance, data=request.data, partial=True)
-            serializer.is_valid(raise_exception=True)
+            serializer.is_valid()
             serializer.save()
-            return JsonResponse({"message": "User updated successfully!", "user_id": instance.id}, status=200)
+            return Response({"message": "User updated successfully!", "user_id": instance.id}, status=200)
         except Exception as e:
-            return JsonResponse({"error": str(e)}, status=400)
+            return Response(serializer.errors, status=400)
 
     def destroy(self, request, *args, **kwargs):
         try:
@@ -70,7 +73,7 @@ class UserRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
             return JsonResponse({"error": str(e)}, status=400)
 
 
-class UserRetriveUpdateView(RetrieveUpdateAPIView): 
+class UserRetriveUpdateView(RetrieveUpdateAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsAdminUser]
     lookup_field = None
@@ -78,37 +81,40 @@ class UserRetriveUpdateView(RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
+
     def get(self, request, *args, **kwargs):
         try:
             instance = self.get_object()
             serializer = self.get_serializer(instance)
-            return Response (serializer.data)
+            return Response(serializer.data)
         except Exception as e:
             print("GET error:", str(e))
             return JsonResponse({"error": str(e)}, status=400)
+
     def update(self, request, *args, **kwargs):
-        try:
-            instance = self.get_object()
-            serializer = self.get_serializer(instance, data=request.data, partial=True)
-            serializer.is_valid(raise_exception=True)
+        instance = self.get_object()
+        serializer = UserSerializer(instance, data=request.data, partial=True)
+        if serializer.is_valid():
             serializer.save()
-            return JsonResponse({"message": "User updated successfully!", "user_id": instance.id}, status=200)
-        except Exception as e:
-            print(e,'line 100 from UserRetriveUpdateView')
-            return JsonResponse({"error": str(e)}, status=400)
+            return Response({"message": "User updated successfully!", "user_id": instance.id},
+                            status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 # allowed for anyone
 class HotelOwnerAndCustomerRegistrationView(CreateAPIView):
     serializer_class = UserSerializer
+
     def create(self, request, *args, **kwargs):
         serilizer = UserSerializer(data=request.data)
         if serilizer.is_valid():
             role = 'customer'
             serilizer.save(role=role)
-            return Response(serilizer.data,status=status.HTTP_201_CREATED)
-        return Response(serilizer.errors,status=status.HTTP_400_BAD_REQUEST)
+            return Response(serilizer.data, status=status.HTTP_201_CREATED)
+        return Response(serilizer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class HotelOwnerAndCustomerRetriveUpdateView(RetrieveUpdateAPIView): 
+
+class HotelOwnerAndCustomerRetriveUpdateView(RetrieveUpdateAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsHotelOwner | IsCustomer]
     lookup_field = None
@@ -121,23 +127,23 @@ class HotelOwnerAndCustomerRetriveUpdateView(RetrieveUpdateAPIView):
         try:
             instance = self.get_object()
             serializer = self.get_serializer(instance)
-            return Response (serializer.data)
+            return Response(serializer.data)
         except Exception as e:
             print("GET error:", str(e))  # ← this will help
             return JsonResponse({"error": str(e)}, status=400)
+
     def update(self, request, *args, **kwargs):
-        try:
-            instance = self.get_object()
-            serializer = self.get_serializer(instance, data=request.data, partial=True)
-            serializer.is_valid(raise_exception=True)
+        instance = self.get_object()
+        serializer = UserSerializer(instance, data=request.data, partial=True)
+        if serializer.is_valid():
             serializer.save()
-            return JsonResponse({"message": "User updated successfully!", "user_id": instance.id}, status=200)
-        except Exception as e:
-            print(e)
-            return JsonResponse({"error": str(e)}, status=400)
-        
-#allowed for hotel oweners
-class EmployeeListCreateview(ListCreateAPIView): 
+            return Response({"message": "User updated successfully!", "user_id": instance.id},
+                            status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# allowed for hotel oweners
+class EmployeeListCreateview(ListCreateAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsHotelOwner]
     queryset = UserSerializer.Meta.model.objects.filter(role='hotel_staff')
@@ -149,6 +155,7 @@ class EmployeeListCreateview(ListCreateAPIView):
             return JsonResponse(serializer.data, safe=False)
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=400)
+
     def post(self, request, *args, **kwargs):
         try:
             serializer = self.get_serializer(data=request.data)
@@ -158,8 +165,9 @@ class EmployeeListCreateview(ListCreateAPIView):
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=400)
 
+
 # allowed for hotel owners
-class EmployeeRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView): 
+class EmployeeRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsHotelOwner]
     queryset = UserSerializer.Meta.model.objects.filter(role='hotel_staff')
@@ -190,11 +198,13 @@ class EmployeeRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=400)
 
+
 # login view
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
-#logout view
+
+# logout view
 class LogoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -207,11 +217,12 @@ class LogoutView(APIView):
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+
 class RegisterUser(APIView):
-    def post(self , request):
+    def post(self, request):
         serilizer = UserSerializerCreate(data=request.data)
         if serilizer.is_valid():
             role = 'customer'
             serilizer.save(role=role)
-            return Response(serilizer.data,status=status.HTTP_201_CREATED)
-        return Response(serilizer.errors,status=status.HTTP_400_BAD_REQUEST)
+            return Response(serilizer.data, status=status.HTTP_201_CREATED)
+        return Response(serilizer.errors, status=status.HTTP_400_BAD_REQUEST)
