@@ -48,8 +48,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     "whitenoise.runserver_nostatic",
     'django.contrib.staticfiles',
-    'cloudinary',
-    'cloudinary_storage',
     'accounts',
     'hotels',
     'bookings',
@@ -162,17 +160,6 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Add these configurations at the bottom
-CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': 'edfmeejs6',
-    'API_KEY': '375391687243733',
-    'API_SECRET': 'S?es5JJmwzAhltVPwnZtYbUJkwv'
-}
-
-# Replace media storage configuration
-DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
-
-
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
@@ -183,8 +170,8 @@ STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
 # STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
-# MEDIA_URL = '/media/'
-# MEDIA_ROOT = os.path.join(BASE_DIR, 'Hotel_Reservation_API/media')
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'Hotel_Reservation_API/media')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
